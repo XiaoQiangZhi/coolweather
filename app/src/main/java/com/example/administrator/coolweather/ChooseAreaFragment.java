@@ -1,9 +1,9 @@
 package com.example.administrator.coolweather;
 
-import android.app.ProgressDialog;
+import android.content.Intent;
 import android.os.Bundle;
-import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -37,7 +37,7 @@ public class ChooseAreaFragment extends Fragment {
     public static final int LEVEL_CITY = 1;
     public static final int LEVEL_COUNTRY = 2;
 
-    private ProgressDialog progressDialog;
+    //private ProgressDialog progressDialog;
     private TextView textTitle;
     private Button backButton;
     private ListView listView;
@@ -71,18 +71,28 @@ public class ChooseAreaFragment extends Fragment {
 
     //设置按钮和ListView的点击监听事件
     @Override
-    public void onActivityCreated(@Nullable Bundle savedInstanceState) {
+    public void onActivityCreated(Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
         listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
-                if (currentLevel ==LEVEL_PROVINCE){
+                if (currentLevel == LEVEL_PROVINCE){
                     selectedProvince = provinceList.get(i);
+                    Log.d("Check", String.valueOf(selectedProvince.getProvinceCode())); //0
+                    Log.d("Check", String.valueOf(selectedProvince.getId()));
+                    Log.d("Check", String.valueOf(selectedProvince.getProvinceName()));
                     queryCities();//加载相应城市的方法
                 }
-                if (currentLevel == LEVEL_CITY){
+                else if (currentLevel == LEVEL_CITY){
                     selectedCity = cityList.get(i);
                     queryCountries();
+                }
+                else if (currentLevel == LEVEL_COUNTRY){
+                    String weatherId = countryList.get(i).getWeather_id();
+                    Intent intent = new Intent(getActivity(),WeatherActivity.class);
+                    intent.putExtra("weather_id",weatherId);
+                    startActivity(intent);
+                    getActivity().finish();
                 }
             }
         });
@@ -127,12 +137,12 @@ public class ChooseAreaFragment extends Fragment {
      * 查询选中的省的所有市，优先从数据库查找，如果没有，再从服务器上查询
      */
     private void queryCities(){
-        textTitle.setText(selectedCity.getCityName());
+        textTitle.setText(selectedProvince.getProvinceName());
         backButton.setVisibility(View.VISIBLE);
-        cityList = DataSupport.findAll(City.class);
+        cityList = DataSupport.where("id = ?",String.valueOf(selectedProvince.getId())).find(City.class);
         if (cityList.size() > 0){
             dataList.clear();
-            for (City city:cityList){
+            for (City city : cityList){
                 dataList.add(city.getCityName());
             }
             adapter.notifyDataSetChanged();
@@ -141,6 +151,7 @@ public class ChooseAreaFragment extends Fragment {
         }else{
             int provinceCode = selectedProvince.getProvinceCode();
             String address = "http://guolin.tech/api/china/"+provinceCode;
+            Log.d("Check",address);
             queryFromServer(address,"city");
         }
 
@@ -152,7 +163,7 @@ public class ChooseAreaFragment extends Fragment {
     private void queryCountries(){
         textTitle.setText(selectedCity.getCityName());
         backButton.setVisibility(View.VISIBLE);
-        countryList = DataSupport.findAll(Country.class);
+        countryList = DataSupport.where("id = ?",String.valueOf(selectedCity.getId())).find(Country.class);
         if (countryList.size() >0 ){
             dataList.clear();
             for (Country country: countryList){
@@ -165,6 +176,7 @@ public class ChooseAreaFragment extends Fragment {
             int provinceCode = selectedProvince.getProvinceCode();
             int cityCode = selectedCity.getCityCode();
             String address = "http://guolin.tech/api/china/"+provinceCode+"/"+cityCode;
+            Log.d("Check",address);
             queryFromServer(address,"country");
         }
     }
@@ -173,14 +185,14 @@ public class ChooseAreaFragment extends Fragment {
      *根据传入的地址和类型从服务器上查询省市县的的数据
      */
     private void queryFromServer(String address,final String type){
-        showProgressDiifalog();
+        //showProgressDiifalog();
         HttpUtil.sendOkHttpResquest(address, new Callback() {
             @Override
             public void onFailure(Call call, IOException e) {
                 getActivity().runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        closeProgressDialog();
+                        //closeProgressDialog();
                         Toast.makeText(getContext(),"加载失败",Toast.LENGTH_SHORT).show();
                     }
                 });
@@ -188,21 +200,21 @@ public class ChooseAreaFragment extends Fragment {
 
             @Override
             public void onResponse(Call call, Response response) throws IOException {
-                String responceText = response.body().toString();
+                String responceText = response.body().string();
                 boolean result = false;
                 if ("province".equals(type)){
-                    Utility.handleProvinceResponse(responceText);
+                    result = Utility.handleProvinceResponse(responceText);
                 }else if ("city".equals(type)){
-                    Utility.handleCityResponse(responceText,selectedProvince.getId());
+                    result = Utility.handleCityResponse(responceText,selectedProvince.getId());
                 }else if ("country".equals(type)){
-                    Utility.handleCountryResponse(responceText,selectedCity.getId());
+                    result = Utility.handleCountryResponse(responceText,selectedCity.getId());
                 }
                 if (result){
                     //回到主线程更新UI
                     getActivity().runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
-                            closeProgressDialog();
+                            //closeProgressDialog();
                             if ("province".equals(type)){
                                 queryProvinces();
                             }
@@ -218,20 +230,20 @@ public class ChooseAreaFragment extends Fragment {
         });
     }
 
-    //显示进度对话框
-    private void showProgressDiifalog(){
-        if (progressDialog == null){
-            progressDialog = new ProgressDialog(getActivity());
-            progressDialog.setMessage("正在加载...");
-            progressDialog.setCanceledOnTouchOutside(false);
-        }
-        progressDialog.show();
-    }
-
-    //关闭进度对话框
-    private void closeProgressDialog(){
-        if (progressDialog != null){
-            progressDialog.dismiss();
-        }
-    }
+//    //显示进度对话框
+//    private void showProgressDiifalog(){
+//        if (progressDialog == null){
+//            progressDialog = new ProgressDialog(getActivity());
+//            progressDialog.setMessage("正在加载...");
+//            progressDialog.setCanceledOnTouchOutside(false);
+//        }
+//        progressDialog.show();
+//    }
+//
+//    //关闭进度对话框
+//    private void closeProgressDialog(){
+//        if (progressDialog != null){
+//            progressDialog.dismiss();
+//        }
+//    }
 }
